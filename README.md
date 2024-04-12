@@ -6,7 +6,10 @@ We introduce a novel perspective to achieving **T**est-time **I**nvariant **R**e
 
 ### Usage
 #### Get Started
-This repo is built with [PyTorch==2.1.2](https://pytorch.org/), Python=3.9, and the modules in ```requirements.txt```. To download the CIFAR datasets,
+This repo is built with [PyTorch==2.1.2](https://pytorch.org/), Python=3.9, and the modules in ```requirements.txt```. 
+
+### CIFAR Datasets
+To download the CIFAR datasets,
 ```
 export DATADIR=/data/cifar
 mkdir ${DATADIR} && cd ${DATADIR}
@@ -15,7 +18,10 @@ tar -xvf CIFAR-10-C.tar
 wget -O CIFAR-100-C.tar https://zenodo.org/record/3555552/files/CIFAR-100-C.tar?download=1
 tar -xvf CIFAR-100-C.tar
 ```
+### Model Weights
+The models weights can be downloaded from [here](https://drive.google.com/drive/folders/1eSdxmz5CbZclVuXKCSurw3Y7uaD8DSFl?usp=drive_link) and placed in ```models/source_weights```.
 
+### Experiments on CIFAR
 To run TIRNU on CIFAR-10/CIFAR-100, simply run:
 ```
 bash run.sh
