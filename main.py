@@ -8,84 +8,30 @@ import torch.optim as optim
 from utils.misc import *
 from utils.test_helpers import *
 from utils.prepare_dataset import *
-from utils.corruptions import corrupt
 from utils.online import FeatureQueue
 # ----------------------------------
 
 import copy
 import time
-import pandas as pd
-from PIL import Image
 
 import random
 import numpy as np
 
 from utils.visualization import *
-
-from utils.utils import Entropy, get_uncert
-from utils.utils import op_copy, lr_scheduler, update_statistics, configure_model, collect_params
-from utils.corruptions import corrupt
-
+from utils.utils import Entropy, get_Cent, simclr_transforms, normalize
+from utils.utils import op_copy
 from utils.meib import kernel_width, calculate_MI
-import torchvision.transforms.v2 as transforms
-# from torchvision.models.feature_extraction import create_feature_extractor, get_graph_node_names
-import json
-
-####### -------------------- #######
-######### Helper Functions #########
-def normalize(dataset):
-
-    if dataset == 'cifar10':
-        mean = (0.4914, 0.4822, 0.4465)
-        std = (0.2023, 0.1994, 0.2010)
-    elif dataset == 'cifar100':
-        mean = (0.5071, 0.4867, 0.4408)
-        std = (0.2675, 0.2565, 0.2761)
-    elif dataset == 'visda':
-        mean = (0.485, 0.456, 0.406)
-        std = (0.229, 0.224, 0.225)
-    elif 'imagenet' in dataset:
-        mean = (0.485, 0.456, 0.406)
-        std = (0.229, 0.224, 0.225)
-    else:
-        raise NotImplementedError
-
-    normalize = transforms.Normalize(mean=mean, std=std)
-    te_transforms = transforms.Compose([transforms.ToTensor(), normalize])
-    return te_transforms
-
-inv_normalize_cifar10 = transforms.Normalize(
-    mean=[-0.4914/0.2023, -0.4822/0.1994, -0.4465/0.2010],
-    std=[1/0.2023, 1/0.1994, 1/0.2010]
-)
-
-def simclr_transforms(dataset):
-    if 'cifar' in dataset:
-        size = 32
-    else:
-        size = 224
-    return  transforms.Compose([
-                transforms.RandomResizedCrop(size=size, scale=(0.2, 1.), antialias=True),
-                transforms.RandomHorizontalFlip(),
-                transforms.RandomApply([
-                    transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)
-                ], p=0.8),
-                transforms.RandomGrayscale(p=0.2),
-                transforms.ToTensor(),
-                normalize(dataset)
-            ])
-
-# ----------------------------------
+# import json
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--dataset', default='cifar10')
+parser.add_argument('--dataset', default='imagenet-c')
 parser.add_argument('--dataroot', default='data/cifar')
 parser.add_argument('--shared', default=None)
 ########################################################################
 parser.add_argument('--depth', default=26, type=int)
 parser.add_argument('--width', default=1, type=int)
 parser.add_argument('--batch_size', default=128, type=int)
-parser.add_argument('--queue_size', default=128, type=int)
+parser.add_argument('--queue_size', default=0, type=int)
 parser.add_argument('--aug_size', default=1, type=int)
 parser.add_argument('--ks', default=10, type=int)
 parser.add_argument('--group_norm', default=0, type=int)
@@ -114,24 +60,19 @@ parser.add_argument('--save_every', default=100, type=int)
 ########################################################################
 parser.add_argument('--tsne', action='store_true')
 ########################################################################
-parser.add_argument('--cls_par', type=float, default=0.001)
 parser.add_argument('--ent_par', type=float, default=1.0)
 parser.add_argument('--ent2_par', type=float, default=0.2)
-parser.add_argument('--uncert_par', type=float, default=0.1)
+parser.add_argument('--Cent_par', type=float, default=0.1)
 parser.add_argument('--Izn_par', type=float, default=0.1)
 parser.add_argument('--ent', type=bool, default=True, action=argparse.BooleanOptionalAction)
 parser.add_argument('--ent2', type=bool, default=True, action=argparse.BooleanOptionalAction)
-parser.add_argument('--uncert', type=bool, default=True, action=argparse.BooleanOptionalAction)
+parser.add_argument('--Cent', type=bool, default=True, action=argparse.BooleanOptionalAction)
 parser.add_argument('--Izn', type=bool, default=True, action=argparse.BooleanOptionalAction)
-parser.add_argument('--t_stats', type=bool, default=False)
-parser.add_argument('--configure', type=bool, default=False)
-parser.add_argument('--transform', type=str, choices=['T1', 'T2', 'T3', 'T4', 'mixed'], default='T1')
+parser.add_argument('--transform', type=str, choices=['simclr', 'lp', 'augmix', 'mixed'], default='simclr')
 ########################################################################
 parser.add_argument('--seed', default=0, type=int)
 
 args = parser.parse_args()
-# if args.Izn:
-#     args.outf = f'results/{args.dataset}_Izn_joint_resnet50'
 
 print(args)
 my_makedir(args.outf)
@@ -146,29 +87,16 @@ cudnn.benchmark = True
 # -------------------------------
 
 net, ext, classifier = build_resnet50(args)
+if 'imagenet' not in args.dataset:
+    load_resnet50(net, classifier, args)
 
 _, teloader = prepare_test_data(args)
-
-# -------------------------------
-
-args.batch_size = min(args.batch_size, args.num_sample)
 _, trloader = prepare_test_data(args, num_sample=args.num_sample)
 
 # -------------------------------
 
 print('Resuming from %s...' %(args.resume))
 
-if 'imagenet' not in args.dataset:
-    load_resnet50(net, classifier, args)
-
-if args.t_stats:
-    ext = update_statistics(ext)
-if args.configure:
-    ext = configure_model(ext)
-    params, param_names = collect_params(ext)
-    optimizer = optim.SGD(params, lr=args.lr, momentum=0.9)
-    optimizer = op_copy(optimizer)
-    
 ## Freeze classifier module
 for k, v in classifier.named_parameters():
     v.requires_grad = False
@@ -203,15 +131,14 @@ else:
 
 # -------------------------------
 
-if not args.configure:
-    optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=0.9)
-    optimizer = op_copy(optimizer)
+optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=0.9)
+optimizer = op_copy(optimizer)
 
 scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer,
     'min', factor=0.5, patience=10, cooldown=10,
     threshold=0.0001, threshold_mode='rel', min_lr=0.0001, verbose=True)
 
-# ----------- Improved Test-time Training ------------
+# ----------- Test Time Adaptation ------------
 
 losses = AverageMeter('Loss', ':.4e')
 
@@ -225,7 +152,6 @@ for epoch in range(1, args.nepoch+1):
     tic = time.time()
     ext.train()
 
-    # optimizer = lr_scheduler(optimizer, epoch, 30)
     for batch_idx, ((inputs, x_orig), labels) in enumerate(trloader):
 
         optimizer.zero_grad()
@@ -252,32 +178,20 @@ for epoch in range(1, args.nepoch+1):
             cfsets = []
             features_test2 = []
             if args.transform == 'mixed': 
-                mix_transform = random.sample(['T1', 'T2', 'T3', 'T4'], k=1)[0]
+                mix_transform = random.sample(['simclr', 'lp', 'augmix'], k=1)[0]
             else:
                 mix_transform = None
             for _ in range(args.aug_size):
-                if args.transform == 'T1' or mix_transform == 'T1':
+                if args.transform == 'simclr' or mix_transform == 'simclr':
                     x_aug = simclr_transforms(args.dataset)(x_orig)
                     z_aug = ext(x_aug.cuda())
-                elif args.transform == 'T2' or mix_transform == 'T2':
+                elif args.transform == 'lp' or mix_transform == 'lp':
                     x_aug = apply_lp_corruption(x_orig, 8, combine_train_corruptions=True, train_corruptions=train_corruptions,
                                             concurrent_combinations=1, max=False, noise='uniform-l2', epsilon=0.25)
                     x_aug = normalize(args.dataset)(x_aug)
                     # x_aug = transforms.Normalize(mean=x_aug.mean(dim=(0,2,3)), std=x_aug.std(dim=(0,2,3)))(x_aug)
                     z_aug = ext(x_aug.cuda())
-                elif args.transform == 'T3' or mix_transform == 'T3':
-                    x_origT3 = torch.stack(transforms.PILToTensor()([transforms.ToPILImage()(x_orig[i]) for i in range(len(x_orig))]), dim=0)
-                    x_aug = []
-
-                    corruption = random.sample(['snow', 'gaussian_noise', 'glass_blur', 'impulse_noise', 'jpeg_compression'], k=1)[0]
-                    for i in range(len(x_origT3)):
-                        x_aug_i = transforms.ToTensor()(Image.fromarray(corrupt(x_origT3[i].permute(1,2,0).numpy(), severity=args.level, corruption_name=args.corruption)).convert('RGB'))
-                        x_aug.append(x_aug_i)
-                    x_aug = torch.stack(x_aug, dim=0)
-                    x_aug = normalize(args.dataset)(x_aug)
-                    z_aug = ext(x_aug.cuda())
-
-                elif args.transform == 'T4' or mix_transform == 'T4':
+                elif args.transform == 'augmix' or mix_transform == 'augmix':
                     if 'imagenet' in args.dataset:
                         from utils.augmix_im import augmix
                     else:
@@ -309,17 +223,21 @@ for epoch in range(1, args.nepoch+1):
             Izn = calculate_MI(features_test, c, s_z, s_c, args.alpha)
             classifier_loss += args.Izn_par*Izn
 
+            # Entropy term on augmented data
             if args.ent2:
                 outputs_test2 = classifier(features_test2)
                 softmax_out2 = nn.Softmax(dim=1)(outputs_test2)
                 entropy_loss2 = torch.mean(Entropy(softmax_out2))
                 classifier_loss += args.ent2_par*entropy_loss2
-            if args.uncert:
+
+            # Cross entropy terms, between augmented and original and vice versa
+            # To enforce consistency
+            if args.Cent:
                 outputs_test2 = classifier(features_test2)
                 softmax_out2 = nn.Softmax(dim=1)(outputs_test2)
-                uncert = torch.mean(get_uncert(softmax_out2, softmax_out))
-                uncert2 = torch.mean(get_uncert(softmax_out, softmax_out2))
-                classifier_loss += args.uncert_par*(uncert+uncert2)
+                Cent = torch.mean(get_Cent(softmax_out2, softmax_out))
+                Cent2 = torch.mean(get_Cent(softmax_out, softmax_out2))
+                classifier_loss += args.Cent_par*(Cent+Cent2)
     
         classifier_loss.backward()
         optimizer.step()
@@ -343,7 +261,7 @@ for epoch in range(1, args.nepoch+1):
                         '{loss.val:.4f}'.format(loss=losses))
 
     # termination and save
-    if epoch > args.stopepoch+1 and all_err_cls[-args.stopepoch] < min(all_err_cls[-args.stopepoch+1:]):
+    if epoch > args.stopepoch and all_err_cls[-args.stopepoch] < min(all_err_cls[-args.stopepoch+1:]):
         print("Termination: {:.2f}".format(all_err_cls[-args.stopepoch]*100))
         # state = {'net': net.state_dict()}
         # save_file = os.path.join(args.outf, args.corruption + '_' +  args.method + '.pth')
@@ -362,10 +280,5 @@ if args.tsne:
     comp_feat(feat_src, label_src, feat_tar, label_tar, prefix+'_marginal.jpg')
     nuisance_tar, feat2_tar, nlabel_tar, _, _ = visu_nuisance(ext, teloader, args.dataset, os.path.join(args.outf, args.corruption + f'_tirnu1_{args.transform}.jpg'), args.transform)
     comp_feat(nuisance_tar, nlabel_tar, feat_tar, label_tar, os.path.join(args.outf, args.corruption + f'_nuisance_marginal1{args.transform}.jpg'))
-    # tsne_all(feat_tar, label_src, feat2_tar, label_tar, nuisance_tar, nlabel_tar, os.path.join(args.outf, args.corruption + f'_feat2_marginal1{args.transform}.jpg'))
-    # comp_feat(feat2_tar, nlabel_tar, feat_tar, label_tar, os.path.join(args.outf, args.corruption + f'_feat2_marginal1{args.transform}.jpg'))
 
 # -------------------------------
-
-# df = pd.DataFrame([all_err_cls]).T
-# df.to_csv(prefix, index=False, float_format='%.4f', header=False)

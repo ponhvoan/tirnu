@@ -3,7 +3,6 @@ ImageNet-Style ResNet
 [1] Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun
     Deep Residual Learning for Image Recognition. arXiv:1512.03385
 ResNet adapted from: https://github.com/bearpaw/pytorch-classification
-SupConResNet adpated from https://github.com/HobbitLong/SupContrast
 """
 import torch
 import torch.nn as nn
@@ -149,7 +148,6 @@ model_dict = {
     'resnet101': [resnet101, 2048],
 }
 
-
 class LinearBatchNorm(nn.Module):
     """Implements BatchNorm1d by BatchNorm2d, for SyncBN purpose"""
     def __init__(self, dim, affine=True):
@@ -162,39 +160,6 @@ class LinearBatchNorm(nn.Module):
         x = self.bn(x)
         x = x.view(-1, self.dim)
         return x
-
-
-class SupConResNet(nn.Module):
-    """backbone + projection head"""
-    def __init__(self, name='resnet50', head='mlp', feat_dim=128, large=False):
-        super(SupConResNet, self).__init__()
-        if not large:
-            model_fun, dim_in = model_dict[name]
-            self.encoder = model_fun()
-        else:
-            self.encoder = models.__dict__[name](pretrained=True)
-            self.fc = self.encoder.fc
-            self.encoder.fc = nn.Identity()
-            dim_in = self.fc.in_features
-            # dim_in = 1000
-
-        if head == 'linear':
-            self.head = nn.Linear(dim_in, feat_dim)
-        elif head == 'mlp':
-            self.head = nn.Sequential(
-                nn.Linear(dim_in, dim_in),
-                nn.ReLU(inplace=True),
-                nn.Linear(dim_in, feat_dim)
-            )
-        else:
-            raise NotImplementedError(
-                'head not supported: {}'.format(head))
-
-    def forward(self, x):
-        feat = self.encoder(x)
-        feat = F.normalize(self.head(self.fc(feat)), dim=1)
-        return feat
-
 
 class LinearClassifier(nn.Module):
     """Linear classifier"""

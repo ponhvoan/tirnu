@@ -3,10 +3,10 @@ import torch
 import torch.nn as nn
 from utils.misc import *
 from utils.imagenet import *
-
+from torchvision import models 
 
 def load_resnet50(net, classifier, args):
-
+    
     if args.ckpt:
         filename = args.resume + '/ckpt_epoch_{:d}.pth'.format(args.ckpt)
     else:
@@ -30,7 +30,6 @@ def load_resnet50(net, classifier, args):
     print('Loaded model trained on classification:', filename)
 
 def build_resnet50(args):
-    from models.BigResNet import resnet50, LinearClassifier, Net
 
     print('Building ResNet50...')
     if args.dataset == 'cifar10':
@@ -40,9 +39,27 @@ def build_resnet50(args):
     elif (args.dataset == "visda") or ("imagenet" in args.dataset):
         classes = 1000
 
-    classifier = LinearClassifier(num_classes=classes).cuda()
-    ext = resnet50()
-    net = Net(ext, classifier).cuda()
+    if args.dataset == 'imagenet-c':
+        from torchvision.models import resnet50, ResNet50_Weights
+        from models.BigResNet import LinearClassifier,Net
+
+        classifier = LinearClassifier(num_classes=classes).cuda()
+        model = models.resnet50(weights=ResNet50_Weights.DEFAULT)
+        state_dict = model.load_state_dict()
+        classifier_dict = {}
+        for k, v in state_dict.items():
+            if k.startswith('fc.'):
+                classifier_dict[k] = v
+        classifier.load_state_dict(classifier_dict)
+        del(model.fc)
+        ext = model
+        net = Net(ext, classifier).cuda()
+
+    else:
+        from models.BigResNet import resnet50, LinearClassifier, Net
+        classifier = LinearClassifier(num_classes=classes).cuda()
+        ext = resnet50()
+        net = Net(ext, classifier).cuda()
 
     return net, ext, classifier
 

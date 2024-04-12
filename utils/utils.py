@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from scipy.spatial.distance import cdist
 import numpy as np
+import torchvision.transforms.v2 as transforms
 
 def Entropy(input_):
     bs = input_.size(0)
@@ -9,11 +10,11 @@ def Entropy(input_):
     entropy = torch.sum(entropy, dim=1)
     return entropy 
 
-def get_uncert(input_, ref):
+def get_Cent(input_, ref):
     bs = input_.size(0)
-    uncert = -ref * torch.log(input_ + 1e-5)
-    uncert = torch.sum(uncert, dim=1)
-    return uncert
+    Cent = -ref * torch.log(input_ + 1e-5)
+    Cent = torch.sum(Cent, dim=1)
+    return Cent
 
 def lr_scheduler(optimizer, iter_num, max_iter, gamma=10, power=0.75):
     decay = (1 + gamma * iter_num / max_iter) ** (-power)
@@ -29,44 +30,43 @@ def op_copy(optimizer):
         param_group['lr0'] = param_group['lr']
     return optimizer
 
-def update_statistics(model):
-    """Configure model to use target samples statistics"""
-    for m in model.modules():
-        if isinstance(m, nn.BatchNorm2d):
-            # force use of batch stats in train and eval modes
-            m.track_running_stats = False
-            m.running_mean = None
-            m.running_var = None
-    return model
+####### -------------------- #######
+######### Helper Functions #########
+def normalize(dataset):
 
-def collect_params(model):
-    """Collect the affine scale + shift parameters from batch norms.
-    Walk the model's modules and collect all batch normalization parameters.
-    Return the parameters and their names.
-    Note: other choices of parameterization are possible!
-    """
-    params = []
-    names = []
-    for nm, m in model.named_modules():
-        if isinstance(m, nn.InstanceNorm2d) or isinstance(m, nn.BatchNorm2d):
-            for np, p in m.named_parameters():
-                if np in ['weight', 'bias']:  # weight is scale, bias is shift
-                    params.append(p)
-                    names.append(f"{nm}.{np}")
-    return params, names
-    
-def configure_model(model):
-    """Configure model to update only BN parameters and use test statistics."""
-    # train mode, because tent optimizes the model to minimize entropy
-    model.train()
-    # disable grad, to (re-)enable only what tent updates
-    model.requires_grad_(False)
-    # configure norm for tent updates: enable grad + force batch statisics
-    for m in model.modules():
-        if isinstance(m, nn.InstanceNorm2d)  or isinstance(m, nn.BatchNorm2d):
-            m.requires_grad_(True)
-            # force use of batch stats in train and eval modes
-            m.track_running_stats = False
-            m.running_mean = None
-            m.running_var = None
-    return model
+    if dataset == 'cifar10':
+        mean = (0.4914, 0.4822, 0.4465)
+        std = (0.2023, 0.1994, 0.2010)
+    elif dataset == 'cifar100':
+        mean = (0.5071, 0.4867, 0.4408)
+        std = (0.2675, 0.2565, 0.2761)
+    elif dataset == 'visda':
+        mean = (0.485, 0.456, 0.406)
+        std = (0.229, 0.224, 0.225)
+    elif 'imagenet' in dataset:
+        mean = (0.485, 0.456, 0.406)
+        std = (0.229, 0.224, 0.225)
+    else:
+        raise NotImplementedError
+
+    normalize = transforms.Normalize(mean=mean, std=std)
+    te_transforms = transforms.Compose([transforms.ToTensor(), normalize])
+    return te_transforms
+
+def simclr_transforms(dataset):
+    if 'cifar' in dataset:
+        size = 32
+    else:
+        size = 224
+    return  transforms.Compose([
+                transforms.RandomResizedCrop(size=size, scale=(0.2, 1.), antialias=True),
+                transforms.RandomHorizontalFlip(),
+                transforms.RandomApply([
+                    transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)
+                ], p=0.8),
+                transforms.RandomGrayscale(p=0.2),
+                transforms.ToTensor(),
+                normalize(dataset)
+            ])
+
+# ----------------------------------

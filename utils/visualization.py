@@ -3,7 +3,6 @@ sys.path.append("..")
 import torch
 import numpy as np
 import torchvision.transforms.v2 as transforms
-from utils.corruptions import corrupt
 from utils.prepare_dataset import apply_lp_corruption, train_corruptions
 import random 
 from PIL import Image
@@ -95,10 +94,10 @@ def obtain_nuisance(ext, dataset, x_orig, features_test, no_iter=1, transform='T
     feat2 = []
                 
     for _ in range(no_iter):
-        if transform == 'T1':
+        if transform == 'simclr':
             x_aug = simclr_transforms(dataset)(x_orig)
             z_aug = ext(x_aug.cuda())
-        elif transform == 'T2':
+        elif transform == 'lp':
             # x_aug = apply_lp_corruption(x_orig, 8, combine_train_corruptions=True, train_corruptions=train_corruptions,
             #                         concurrent_combinations=1, max=False, noise='standard', epsilon=0)
             x_aug = apply_lp_corruption(x_orig, 8, combine_train_corruptions=False, train_corruptions=train_corruptions,
@@ -106,18 +105,7 @@ def obtain_nuisance(ext, dataset, x_orig, features_test, no_iter=1, transform='T
             x_aug = normalize(dataset)(x_aug)
             # x_aug = transforms.Normalize(mean=x_aug.mean(dim=(0,2,3)), std=x_aug.std(dim=(0,2,3)))(x_aug)
             z_aug = ext(x_aug.cuda())
-        elif transform == 'T3':
-            x_origT3 = torch.stack(transforms.PILToTensor()([transforms.ToPILImage()(x_orig[i]) for i in range(len(x_orig))]), dim=0)
-            x_aug = []
-
-            corruption = random.sample(['snow', 'gaussian_noise', 'glass_blur', 'impulse_noise', 'jpeg_compression'], k=1)[0]
-            for i in range(len(x_origT3)):
-                x_aug_i = transforms.ToTensor()(Image.fromarray(corrupt(x_origT3[i].permute(1,2,0).numpy(), corruption_name=corruption)).convert('RGB'))
-                x_aug.append(x_aug_i)
-            x_aug = torch.stack(x_aug, dim=0)
-            x_aug = normalize(dataset)(x_aug)
-            z_aug = ext(x_aug.cuda())
-        elif transform == 'T4':
+        elif transform == 'augmix':
             if 'imagenet' in dataset:
                 from utils.augmix_im import augmix
             else:
