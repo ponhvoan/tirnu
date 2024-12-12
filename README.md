@@ -1,4 +1,4 @@
-## Expose and Conquer: Fully Test-Time Adaptation via Unlearning Nuisance Factors
+## Uncover and Conquer: Fully Test-Time Adaptation via Unlearning Nuisance Factors
 
 This repo contains the source code for the implementation of TIRNU in PyTorch. We address the challenging but practical setting of fully test-time adaptation, where there is no access to source training data, and the model is updated only using unlabelled (target) test data. 
 
@@ -19,7 +19,7 @@ wget -O CIFAR-100-C.tar https://zenodo.org/record/3555552/files/CIFAR-100-C.tar?
 tar -xvf CIFAR-100-C.tar
 ```
 ### Model Weights
-The models weights can be downloaded from [here](https://drive.google.com/drive/folders/1eSdxmz5CbZclVuXKCSurw3Y7uaD8DSFl?usp=drive_link) and placed in ```models/source_weights```.
+The models weights can be downloaded from [here](https://drive.google.com/drive/folders/1TqdIpPIEhGpMGiO7vvRDXu7jd4exoSLp?usp=sharing) and placed in ```models/source_weights```.
 
 ### Experiments on CIFAR
 To run TIRNU on CIFAR-10/CIFAR-100, simply run:
