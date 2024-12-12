@@ -1,4 +1,4 @@
-## Uncover and Conquer: Fully Test-Time Adaptation via Unlearning Nuisance Factors
+## Uncover and Unlearn: Fully Test-Time Adaptation via Unlearning Nuisance Factors
 
 This repo contains the source code for the implementation of TIRNU in PyTorch. We address the challenging but practical setting of fully test-time adaptation, where there is no access to source training data, and the model is updated only using unlabelled (target) test data. 
 
