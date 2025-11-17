@@ -1,8 +1,6 @@
 ## Uncover and Unlearn: Fully Test-Time Adaptation via Unlearning Nuisance Factors
 
-This repo contains the source code for the implementation of TIRNU in PyTorch. We address the challenging but practical setting of fully test-time adaptation, where there is no access to source training data, and the model is updated only using unlabelled (target) test data. 
-
-We introduce a novel perspective to achieving **T**est-time **I**nvariant **R**epresentation learning through **U**nlearning **N**uisance (TIRNU).
+We introduce a novel perspective to achieving **T**est-time **I**nvariant **R**epresentation learning through **U**nlearning **N**uisance (TIRNU), presented at ECML 2025 under the research track: [paper link](https://link.springer.com/article/10.1007/s10994-025-06842-w). This repository contains the source code for the implementation of TIRNU in PyTorch. We address the challenging but practical setting of fully test-time adaptation, where there is no access to source training data, and the model is updated only using unlabelled (target) test data.
 
 ### Usage
 #### Get Started
@@ -27,6 +25,23 @@ To run TIRNU on CIFAR-10/CIFAR-100, simply run:
 bash run.sh
 ```
 The hyperparameters, such as batch size, can be changed in the ```run.sh``` script.
+
+### Citation
+
+If you find our work useful, please cite:
+
+```
+@article{srey2025uncover,
+  title={Uncover and unlearn nuisances: agnostic fully test-time adaptation},
+  author={Srey, Ponhvoan and Shi, Yaxin and Qian, Hangwei and Li, Jing and Tsang, Ivor W},
+  journal={Machine Learning},
+  volume={114},
+  number={9},
+  pages={203},
+  year={2025},
+  publisher={Springer}
+}
+```
 
 ### Acknowledgement
 The code is inspired by [TTT++](https://github.com/vita-epfl/ttt-plus-plus.git). We thank the authors for their comprehensive codebase.
