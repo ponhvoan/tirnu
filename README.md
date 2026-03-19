@@ -1,6 +1,6 @@
 ## Uncover and Unlearn: Fully Test-Time Adaptation via Unlearning Nuisance Factors
 
-We introduce a novel perspective to achieving **T**est-time **I**nvariant **R**epresentation learning through **U**nlearning **N**uisance (TIRNU), presented at ECML 2025 under the research track: [paper link](https://link.springer.com/article/10.1007/s10994-025-06842-w). This repository contains the source code for the implementation of TIRNU in PyTorch. We address the challenging but practical setting of fully test-time adaptation, where there is no access to source training data, and the model is updated only using unlabelled (target) test data.
+We introduce a novel perspective to achieving **T**est-time **I**nvariant **R**epresentation learning through **U**nlearning **N**uisance (TIRNU), presented at ECML 2025 under the research track: [paper link](https://arxiv.org/abs/2511.12491). This repository contains the source code for the implementation of TIRNU in PyTorch. We address the challenging but practical setting of fully test-time adaptation, where there is no access to source training data, and the model is updated only using unlabelled (target) test data.
 
 ### Usage
 #### Get Started
